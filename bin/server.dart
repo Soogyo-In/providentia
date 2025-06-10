@@ -7,6 +7,7 @@ import 'package:shelf_router/shelf_router.dart';
 // Configure routes.
 final _router = Router()
   ..get('/', _rootHandler)
+  ..post('/', _rootHandler)
   ..get('/echo/<message>', _echoHandler);
 
 Response _rootHandler(Request req) {
