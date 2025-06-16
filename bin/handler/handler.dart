@@ -1,2 +1,2 @@
-export 'google_drive_watch_handler.dart';
+export 'watch_google_drive_handler.dart';
 export 'root_handler.dart';

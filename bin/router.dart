@@ -3,11 +3,11 @@ import 'handler/handler.dart';
 
 final router = Router()
   ..get(Route.root.path, rootHandler)
-  ..post(Route.googleDriveWatch.path, googleDriveWatchHandler);
+  ..post(Route.watchGoogleDrive.path, googleDriveWatchHandler);
 
 enum Route {
   root('/'),
-  googleDriveWatch('/google/drive/watch');
+  watchGoogleDrive('/google/drive/watch');
 
   const Route(this.path);
 
