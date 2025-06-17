@@ -43,6 +43,6 @@ Future<Response> rootHandler(Request req) async {
 ''';
   return Response.ok(
     welcome,
-    headers: {HttpHeaders.contentTypeHeader: ContentType.html},
+    headers: {HttpHeaders.contentTypeHeader: ContentType.html.mimeType},
   );
 }

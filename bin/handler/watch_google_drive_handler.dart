@@ -24,7 +24,7 @@ Future<Response> googleDriveWatchHandler(Request req) async {
   } catch (e) {
     return Response.internalServerError(
       body: 'Failed to initialize Google API client: $e',
-      headers: {HttpHeaders.contentTypeHeader: ContentType.text},
+      headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
     );
   }
 
@@ -39,7 +39,7 @@ Future<Response> googleDriveWatchHandler(Request req) async {
     if (token == null) {
       return Response.internalServerError(
         body: 'No start page token found in Drive API.',
-        headers: {HttpHeaders.contentTypeHeader: ContentType.text},
+        headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
       );
     }
 
@@ -47,7 +47,7 @@ Future<Response> googleDriveWatchHandler(Request req) async {
   } catch (e) {
     return Response.internalServerError(
       body: 'Failed to get start page token from Drive API: $e',
-      headers: {HttpHeaders.contentTypeHeader: ContentType.text},
+      headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
     );
   }
 
@@ -67,7 +67,7 @@ Future<Response> googleDriveWatchHandler(Request req) async {
   } catch (e) {
     return Response.internalServerError(
       body: 'Failed to set up watch on Google Drive changes: $e',
-      headers: {HttpHeaders.contentTypeHeader: ContentType.text},
+      headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
     );
   }
 
@@ -75,7 +75,7 @@ Future<Response> googleDriveWatchHandler(Request req) async {
   if (expiration == null) {
     return Response.internalServerError(
       body: 'Channel expiration is null, cannot schedule task.',
-      headers: {HttpHeaders.contentTypeHeader: ContentType.text},
+      headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
     );
   }
 
@@ -101,12 +101,12 @@ Future<Response> googleDriveWatchHandler(Request req) async {
   } catch (e) {
     return Response.internalServerError(
       body: 'Failed to create Cloud Task: $e',
-      headers: {HttpHeaders.contentTypeHeader: ContentType.text},
+      headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
     );
   }
 
   return Response.ok(
     'Google Drive watch set up successfully. Channel ID: $channelId',
-    headers: {HttpHeaders.contentTypeHeader: ContentType.text},
+    headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
   );
 }
