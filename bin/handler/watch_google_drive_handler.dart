@@ -58,7 +58,9 @@ Future<Response> googleDriveWatchHandler(Request req) async {
       Channel(
         id: channelId,
         type: 'web_hook',
-        address: '$serviceUrl/${Route.generateMonthlyLedgerFromDrive.path}',
+        address: Route.generateMonthlyLedgerFromDrive
+            .buildUrl(serviceUrl)
+            .toString(),
         token: googleDriveChannelToken,
       ),
       startPageToken,
@@ -91,7 +93,7 @@ Future<Response> googleDriveWatchHandler(Request req) async {
           name: '$_taskParent/tasks/${channel.id}',
           httpRequest: HttpRequest(
             httpMethod: 'POST',
-            url: '$serviceUrl/${Route.watchGoogleDrive.path}',
+            url: Route.watchGoogleDrive.buildUrl(serviceUrl).toString(),
           ),
           scheduleTime: scheduleTime.toIso8601String(),
         ),
