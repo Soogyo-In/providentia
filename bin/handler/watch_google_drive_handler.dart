@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:googleapis/cloudtasks/v2.dart';
+import 'package:googleapis/datastore/v1.dart';
 import 'package:googleapis/drive/v3.dart';
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:shelf/shelf.dart';
@@ -19,7 +20,11 @@ Future<Response> googleDriveWatchHandler(Request req) async {
   try {
     client = await clientViaServiceAccount(
       ServiceAccountCredentials.fromJson(json.decode(credentials)),
-      [DriveApi.driveReadonlyScope, CloudTasksApi.cloudTasksScope],
+      [
+        DriveApi.driveReadonlyScope,
+        CloudTasksApi.cloudTasksScope,
+        DatastoreApi.datastoreScope,
+      ],
     );
   } catch (e) {
     return Response.internalServerError(
@@ -47,6 +52,32 @@ Future<Response> googleDriveWatchHandler(Request req) async {
   } catch (e) {
     return Response.internalServerError(
       body: 'Failed to get start page token from Drive API: $e',
+      headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
+    );
+  }
+
+  try {
+    await DatastoreApi(client).projects.commit(
+      CommitRequest(
+        mode: 'NON_TRANSACTIONAL',
+        mutations: [
+          Mutation(
+            update: Entity(
+              key: Key(
+                path: [
+                  PathElement(kind: 'DrivePageTokenState', name: 'global'),
+                ],
+              ),
+              properties: {'lastPageToken': Value(stringValue: startPageToken)},
+            ),
+          ),
+        ],
+      ),
+      projectId,
+    );
+  } catch (e) {
+    return Response.internalServerError(
+      body: 'Failed to store start page token in Datastore: $e',
       headers: {HttpHeaders.contentTypeHeader: ContentType.text.mimeType},
     );
   }
