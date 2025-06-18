@@ -62,6 +62,11 @@ Future<Response> googleDriveWatchHandler(Request req) async {
             .buildUrl(serviceUrl)
             .toString(),
         token: googleDriveChannelToken,
+        expiration: DateTime.now()
+            .toUtc()
+            .add(Duration(days: 7))
+            .millisecondsSinceEpoch
+            .toString(),
       ),
       startPageToken,
       supportsAllDrives: true,
