@@ -3,7 +3,11 @@ import 'handler/handler.dart';
 
 final router = Router()
   ..get(Route.root.path, rootHandler)
-  ..post(Route.watchGoogleDrive.path, googleDriveWatchHandler);
+  ..post(Route.watchGoogleDrive.path, googleDriveWatchHandler)
+  ..post(
+    Route.generateMonthlyLedgerFromDrive.path,
+    generateMonthlyLedgerFromDriveHandler,
+  );
 
 enum Route {
   root('/'),
