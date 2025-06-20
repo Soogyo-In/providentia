@@ -1,0 +1,71 @@
+---
+id: 1f1b59d3-90b0-4843-8c44-4ac59f449ebf
+---
+sequenceDiagram
+  actor User as User
+  actor Cloud Task as Cloud Task
+  participant Drive API as Drive API
+  participant Ledger API as Ledger API
+  participant Data Store API as Data Store API
+
+  User ->> Drive API: changes
+  Drive API ->> Ledger API: webhook notify
+
+  break channel token is not match
+    Ledger API -->> Drive API: 401 Unauthorized
+  end
+
+
+  Ledger API ->> Data Store API: get isProcessing
+  Data Store API -->> Ledger API: isProcessing
+
+  break isProcessing == true
+    Ledger API -->> Drive API: 202 Accepted
+  end
+
+  Ledger API ->> Data Store API: set isProcessing true
+  Ledger API ->> Data Store API: get startPageToken
+  Data Store API -->> Ledger API: startPageToken
+
+  rect rgba(255, 200, 0, 0.15)
+    alt state rollback plan
+      Ledger API ->> Drive API: get changes
+    else get changes failed
+      Ledger API ->> Data Store API: set isProcessing false
+      break
+        Ledger API ->> Cloud Task: add retry task
+        Ledger API -->> Drive API: 500 Internal Server Error
+      end
+      
+      Ledger API ->> Data Store API: set newStartPageToken from changes
+    else set startPageToken failed
+      Ledger API ->> Data Store API: set isProcessing false
+      Ledger API ->> Data Store API: set previousStartPageToken
+      break
+        Ledger API ->> Cloud Task: add retry task
+        Ledger API -->> Drive API: 500 Internal Server Error
+      end
+      
+      Ledger API -->> Drive API: create ledger file
+    else file creation failed
+      Ledger API ->> Data Store API: set isProcessing false
+      Ledger API ->> Data Store API: set previousStartPageToken
+      break
+        Ledger API ->> Cloud Task: add retry task
+        Ledger API -->> Drive API: 500 Internal Server Error
+      end
+    end
+  end
+
+  Ledger API ->> Data Store API: set isProcessing false
+  
+  Ledger API ->> Drive API: get startPageToken
+  Drive API -->> Ledger API: newStartPageToken
+  break startPageToken == newStartPageToken
+    Ledger API -->> Drive API: 200 Ok
+  end
+
+  Ledger API ->> Cloud Task: create generate monthly ledger cloud task
+  Note over Drive API: If both startPageTokens are not same, that means the google drive has changes so ledger need to be generated.
+
+  Cloud Task ->> Ledger API: generate monthly ledger
