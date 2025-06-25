@@ -1,71 +1,45 @@
----
-id: 1f1b59d3-90b0-4843-8c44-4ac59f449ebf
----
 sequenceDiagram
-  actor User as User
-  actor Cloud Task as Cloud Task
-  participant Drive API as Drive API
-  participant Ledger API as Ledger API
-  participant Data Store API as Data Store API
+  title Monthly Ledger Generation Process
 
-  User ->> Drive API: changes
-  Drive API ->> Ledger API: webhook notify
+  actor User
+  participant Drive API
+  participant Ledger API
+  participant Data Store API
+  participant Vertex AI API
+  participant Cloud Task
 
-  break channel token is not match
-    Ledger API -->> Drive API: 401 Unauthorized
+  note over Ledger API, Cloud Task: General Exception Handling:<br/>All subsequent API calls will return 500 on failure.<br/>Details are omitted for brevity.
+
+  User ->> Drive API: File changes trigger webhook
+  Drive API ->> Ledger API: Notify changes
+
+  break Invalid Request or Already Processing
+    note over Drive API, Ledger API: If the request is invalid or another process is running, stop.
+    Ledger API -->> Drive API: Respond 401/202.
   end
 
+  Ledger API ->> Data Store API: Set isProcessing = true
 
-  Ledger API ->> Data Store API: get isProcessing
-  Data Store API -->> Ledger API: isProcessing
+  alt Happy Path: Ledger Generation Succeeds
+    note over Ledger API, Drive API: Process data and create/update ledger in Drive.<br/>(See 'process_ledger_data_sequence.mmd' for details)
+    Ledger API ->> Drive API: Create/Update Monthly Ledger
+    
+    Ledger API ->> Data Store API: Set newStartPageToken & isProcessing = false
 
-  break isProcessing == true
-    Ledger API -->> Drive API: 202 Accepted
-  end
+    Ledger API ->> Drive API: Get latest startPageToken
+    Drive API -->> Ledger API: currentStartPageToken
+    opt newStartPageToken != currentStartPageToken
+      note over Ledger API, Cloud Task: If new changes occurred, schedule another generation task.
+      Ledger API ->> Cloud Task: Create generation task
+    end
 
-  Ledger API ->> Data Store API: set isProcessing true
-  Ledger API ->> Data Store API: get startPageToken
-  Data Store API -->> Ledger API: startPageToken
+    Ledger API -->> Drive API: 200 OK
 
-  rect rgba(255, 200, 0, 0.15)
-    alt state rollback plan
-      Ledger API ->> Drive API: get changes
-    else get changes failed
-      Ledger API ->> Data Store API: set isProcessing false
-      break
-        Ledger API ->> Cloud Task: add retry task
-        Ledger API -->> Drive API: 500 Internal Server Error
-      end
-      
-      Ledger API ->> Data Store API: set newStartPageToken from changes
-    else set startPageToken failed
-      Ledger API ->> Data Store API: set isProcessing false
-      Ledger API ->> Data Store API: set previousStartPageToken
-      break
-        Ledger API ->> Cloud Task: add retry task
-        Ledger API -->> Drive API: 500 Internal Server Error
-      end
-      
-      Ledger API -->> Drive API: create ledger file
-    else file creation failed
-      Ledger API ->> Data Store API: set isProcessing false
-      Ledger API ->> Data Store API: set previousStartPageToken
-      break
-        Ledger API ->> Cloud Task: add retry task
-        Ledger API -->> Drive API: 500 Internal Server Error
-      end
+  else Failure: Rollback and Retry
+    note over Ledger API, Cloud Task: An error occurred during generation. Reverting state.
+    Ledger API ->> Data Store API: Set isProcessing = false
+    Ledger API ->> Cloud Task: Schedule a retry task
+    break Process stops after scheduling retry
+      Ledger API -->> Drive API: 500 Internal Server Error
     end
   end
-
-  Ledger API ->> Data Store API: set isProcessing false
-  
-  Ledger API ->> Drive API: get startPageToken
-  Drive API -->> Ledger API: newStartPageToken
-  break startPageToken == newStartPageToken
-    Ledger API -->> Drive API: 200 Ok
-  end
-
-  Ledger API ->> Cloud Task: create generate monthly ledger cloud task
-  Note over Drive API: If both startPageTokens are not same, that means the google drive has changes so ledger need to be generated.
-
-  Cloud Task ->> Ledger API: generate monthly ledger

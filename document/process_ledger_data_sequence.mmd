@@ -1,0 +1,61 @@
+sequenceDiagram
+  title Process Ledger Data
+
+  participant LedgerAPI
+  participant DriveAPI
+  participant DataStoreAPI
+  participant VertexAIAPI
+
+  LedgerAPI ->> DataStoreAPI: Get last known startPageToken
+  DataStoreAPI -->> LedgerAPI: startPageToken
+
+  LedgerAPI ->> DriveAPI: Get changes since startPageToken
+  DriveAPI -->> LedgerAPI: {changes, newStartPageToken}
+
+  note over LedgerAPI, DriveAPI: Phase 1: Collect & Group Changes
+  rect rgb(225, 235, 250)
+    LedgerAPI ->> DriveAPI: Get all changes of Google Sheets file names
+    DriveAPI -->> LedgerAPI: List of changes for Google Sheets file names
+
+    LedgerAPI ->> DriveAPI: Get all Google Sheets to create a fileName:id map
+    DriveAPI -->> LedgerAPI: List of all Google Sheets files
+    LedgerAPI ->> LedgerAPI: Create fileName:id map
+
+    LedgerAPI ->> VertexAIAPI: Prompt to group changed file IDs by month (YYYY-MM)
+    note over LedgerAPI, VertexAIAPI: Send changed file names and fileName:id map
+    VertexAIAPI -->> LedgerAPI: {YYYY-MM: [...file ids]}
+  end
+
+  note over LedgerAPI, VertexAIAPI: Phase 2: Process & Summarize Data
+  rect rgb(250, 240, 225)
+    loop For each month in {YYYY-MM: [...file ids]}
+      LedgerAPI ->> DriveAPI: Export each file to CSV
+      DriveAPI -->> LedgerAPI: CSV data
+    end
+
+    LedgerAPI ->> LedgerAPI: Create {YYYY-MM: [...csv]} map
+
+    loop For each month in {YYYY-MM: [...csv]}
+      LedgerAPI ->> VertexAIAPI: Prompt to summarize CSV data
+      VertexAIAPI -->> LedgerAPI: CSV data
+      LedgerAPI ->> LedgerAPI: Convert CSV data to sheet JSON
+      
+      alt If a sheet for the month already exists
+        LedgerAPI ->> DriveAPI: Update the existing sheet with summarized data
+      else
+        LedgerAPI ->> DriveAPI: Add a new sheet with summarized data
+      end      
+    end
+  end
+
+  note over LedgerAPI, DriveAPI: Phase 3: Finalize & Sort
+  rect rgb(230, 250, 230)
+    loop for each year in {YYYY-MM: [...csv]}
+      LedgerAPI ->> DriveAPI: Get all monthly sheets for the year
+      DriveAPI -->> LedgerAPI: List of monthly sheets
+      LedgerAPI ->> LedgerAPI: Sort monthly sheets by name
+      LedgerAPI ->> DriveAPI: Batch update to sort monthly sheets
+    end
+  end
+
+  note over LedgerAPI: Return newStartPageToken to main process
