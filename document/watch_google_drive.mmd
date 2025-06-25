@@ -2,32 +2,37 @@
 id: 99e36072-d15c-4d55-8eed-881d6c9224be
 ---
 sequenceDiagram
-  actor Cloud Build
-  actor Cloud Task
+  title Google Drive Watch Process
+
+  actor "CI/CD Pipeline"
   participant Watch API
-  participant Drive API
+  participant Google Drive API
   participant Data Store API
-  
-  Cloud Build  -) Watch API: deploy watch api
-  
-  par 
-    Watch API ->> Drive API: get startPageToken
+  participant Cloud Task
+
+  "CI/CD Pipeline" ->> Watch API: Deploy & Initialize Watch
+
+  note over Watch API, Data Store API: General Exception Handling:<br/>All subsequent API calls will return 500 on failure.<br/>Details omitted for brevity.
+
+  par "Get startPageTokens to prevent race condition"
+    Watch API ->> Google Drive API: get startPageToken
   and
     Watch API ->> Data Store API: get startPageToken
   end
-    Drive API -->> Watch API: startPageToken
-    Data Store API -->> Watch API: startPageToken
-  
-  alt if both startPageTokens are not same
-    Watch API ->> Cloud Task: add retry task after 5 minutes
-    note left of Watch API: startPageToken mismatch<br>between Watch API and Data Store API<br>will cause data inconsistency<br>so retry after 5 minutes
-    break
-      Watch API -->> Cloud Build: 202 Accepted
-    end
-  else
+
+  Google Drive API -->> Watch API: startPageToken
+  Data Store API -->> Watch API: startPageToken
+
+  alt "Critical Exception: startPageTokens mismatch"
+    note over Watch API: Mismatch detected. Scheduling a retry.
+    Watch API ->> Cloud Task: add retry task (e.g., after 5 mins)
+  else "Happy Path: Tokens match"
+    note over Watch API: Tokens match. Proceeding to watch.
     Watch API ->> Data Store API: set startPageToken
-    Watch API ->> Drive API: watch drive
-    Drive API -->> Watch API: expiration date
-    Watch API ->> Cloud Task: add task at expiration date
-    Cloud Task ->> Watch API: call watch api
+    Watch API ->> Google Drive API: watch drive
+    Google Drive API -->> Watch API: {channelId, resourceId, expiration}
+    Watch API ->> Cloud Task: add renewal task before expiration
   end
+
+  note over Cloud Task, Watch API: Later...
+  Cloud Task ->> Watch API: Execute scheduled task (retry or renewal)
