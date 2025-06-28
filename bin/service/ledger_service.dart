@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:googleapis/aiplatform/v1.dart';
+import 'package:googleapis/drive/v3.dart';
 import 'package:googleapis_auth/auth_io.dart';
 
 import '../environments.dart';
@@ -9,10 +10,39 @@ import '../environments.dart';
 /// A service class to handle the business logic for processing ledger data.
 /// This encapsulates the steps detailed in the 'process_ledger_data_sequence.mmd' diagram.
 class LedgerService {
+  final DriveApi _driveApi;
   final AiplatformApi _aiplatformApi;
 
   LedgerService(AutoRefreshingAuthClient client)
-    : _aiplatformApi = AiplatformApi(client);
+    : _driveApi = DriveApi(client),
+      _aiplatformApi = AiplatformApi(client);
+
+  Future<List<(String name, String id)>> getSpreadSheets() async {
+    final response = await _driveApi.files.list(
+      q:
+          "mimeType='application/vnd.google-apps.spreadsheet'"
+          " or mimeType='application/vnd.ms-excel'"
+          " or mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      $fields: 'files(id, name)',
+    );
+
+    final fileNameAndIds = <(String, String)>[];
+
+    final files = response.files;
+    if (files == null || files.isEmpty) return [];
+
+    for (final file in files) {
+      final name = file.name;
+      final id = file.id;
+      if (name == null || id == null) continue;
+
+      fileNameAndIds.add((name, id));
+    }
+
+    return fileNameAndIds;
+  }
 
   Future<List<OrganizeFilesByMonthResponse>> organizeFilesByMonth(
     List<(String name, String id)> fileNameAndId,
