@@ -5,30 +5,34 @@ import 'package:googleapis/aiplatform/v1.dart';
 import 'package:googleapis/drive/v3.dart';
 import 'package:googleapis_auth/auth_io.dart';
 
-import '../environments.dart';
+import '../../environments.dart';
+import '../../google_drive_mime_type.dart';
+import '../../spreadsheet_converter.dart';
+import 'ledger_service.dart';
 
 /// A service class to handle the business logic for processing ledger data.
 /// This encapsulates the steps detailed in the 'process_ledger_data_sequence.mmd' diagram.
-class LedgerService {
+class DefaultLedgerService implements LedgerService {
   final DriveApi _driveApi;
   final AiplatformApi _aiplatformApi;
 
-  LedgerService(AutoRefreshingAuthClient client)
+  DefaultLedgerService(AutoRefreshingAuthClient client)
     : _driveApi = DriveApi(client),
       _aiplatformApi = AiplatformApi(client);
 
-  Future<List<(String name, String id)>> getSpreadSheets() async {
+  @override
+  Future<List<(String name, String id, String mimeType)>>
+  getSpreadSheets() async {
     final response = await _driveApi.files.list(
       q:
           "mimeType='application/vnd.google-apps.spreadsheet'"
           " or mimeType='application/vnd.ms-excel'"
           " or mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'",
       supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      $fields: 'files(id, name)',
+      $fields: 'files(id, name, mimeType)',
     );
 
-    final fileNameAndIds = <(String, String)>[];
+    final fileMetadata = <(String, String, String)>[];
 
     final files = response.files;
     if (files == null || files.isEmpty) return [];
@@ -36,22 +40,24 @@ class LedgerService {
     for (final file in files) {
       final name = file.name;
       final id = file.id;
-      if (name == null || id == null) continue;
+      final mimeType = file.mimeType;
+      if (name == null || id == null || mimeType == null) continue;
 
-      fileNameAndIds.add((name, id));
+      fileMetadata.add((name, id, mimeType));
     }
 
-    return fileNameAndIds;
+    return fileMetadata;
   }
 
+  @override
   Future<List<OrganizeFilesByMonthResponse>> organizeFilesByMonth(
-    List<(String name, String id)> fileNameAndId,
+    List<(String name, String id, String mimeType)> fileMetadata,
   ) async {
     final organizeFilesByMonthPrompt =
         '''
       You are a file organization expert.
       Your task is to group a list of file IDs by month in 'yyyy-MM' format based on their names.
-      List of shared files (file name, file id): $fileNameAndId
+      List of shared files (file name, file id, mime type): $fileMetadata
     ''';
 
     final endpoint =
@@ -85,11 +91,21 @@ class LedgerService {
                         type: 'STRING',
                         description: '파일이 속한 월 (yyyy-MM 형식)',
                       ),
-                      'fileIds': GoogleCloudAiplatformV1Schema(
+                      'files': GoogleCloudAiplatformV1Schema(
                         type: 'ARRAY',
+                        description: '파일 목록',
                         items: GoogleCloudAiplatformV1Schema(
-                          type: 'STRING',
-                          description: '파일 ID 목록',
+                          type: 'OBJECT',
+                          properties: {
+                            'id': GoogleCloudAiplatformV1Schema(
+                              type: 'STRING',
+                              description: '파일 ID',
+                            ),
+                            'mimeType': GoogleCloudAiplatformV1Schema(
+                              type: 'STRING',
+                              description: '파일 MIME 타입',
+                            ),
+                          },
                         ),
                       ),
                     },
@@ -98,11 +114,26 @@ class LedgerService {
                   example: [
                     {
                       'month': '2023-02',
-                      'fileIds': ['file_id3'],
+                      'files': [
+                        {
+                          'id': 'file_id3',
+                          'mimeType': 'application/vnd.google-apps.spreadsheet',
+                        },
+                      ],
                     },
                     {
                       'month': '2023-01',
-                      'fileIds': ['file_id1', 'file_id2'],
+                      'files': [
+                        {
+                          'id': 'file_id1',
+                          'mimeType': 'application/vnd.ms-excel',
+                        },
+                        {
+                          'id': 'file_id2',
+                          'mimeType':
+                              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        },
+                      ],
                     },
                   ],
                   format: endpoint,
@@ -130,22 +161,51 @@ class LedgerService {
         .map(OrganizeFilesByMonthResponse.fromJson)
         .toList();
   }
-}
 
-class OrganizeFilesByMonthResponse {
-  final String month;
-  final List<String> fileIds;
+  @override
+  Future<Csv> exportFileToCsv(String fileId, String mimeType) async {
+    final Media media;
+    if (mimeType == GoogleDriveMimeType.spreadsheet.mimeType) {
+      media =
+          await _driveApi.files.export(
+                fileId,
+                'text/csv',
+                downloadOptions: DownloadOptions.fullMedia,
+              )
+              as Media;
+    } else if (mimeType ==
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        mimeType == 'application/vnd.ms-excel') {
+      final copy = await _driveApi.files.copy(
+        File(mimeType: GoogleDriveMimeType.spreadsheet.mimeType),
+        fileId,
+        supportsAllDrives: true,
+      );
 
-  OrganizeFilesByMonthResponse({required this.month, required this.fileIds});
+      final copiedFileId = copy.id;
+      if (copiedFileId == null) {
+        throw Exception('Failed to copy file: $fileId');
+      }
 
-  factory OrganizeFilesByMonthResponse.fromJson(Map<String, dynamic> json) {
-    return OrganizeFilesByMonthResponse(
-      month: json['month'] as String,
-      fileIds: List<String>.from(json['fileIds'] as List),
+      media =
+          await _driveApi.files.export(
+                copiedFileId,
+                'text/csv',
+                downloadOptions: DownloadOptions.fullMedia,
+              )
+              as Media;
+    } else {
+      throw Exception('Unsupported file type: $mimeType for file: $fileId');
+    }
+
+    final bytes = await media.stream.expand((e) => e).toList();
+    final csvString = utf8.decode(bytes);
+    final rows = csvString.split('\n');
+
+    return Csv(
+      rowsCount: rows.length,
+      columnsCount: rows.first.split(',').length,
+      cells: rows.expand((r) => r.split(',')).toList(),
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {'month': month, 'fileIds': fileIds};
   }
 }

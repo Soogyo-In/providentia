@@ -1,7 +1,10 @@
 import 'package:shelf_router/shelf_router.dart';
+
 import 'handler/handler.dart';
+import 'handler/ledger_gen_test_handler.dart';
 
 final router = Router()
+  ..post('/ledger/gen/test', ledgerGenTestHandler)
   ..get(Route.root.path, rootHandler)
   ..post(Route.watchGoogleDrive.path, watchGoogleDriveHandler)
   ..post(
