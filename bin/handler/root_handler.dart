@@ -43,6 +43,6 @@ Response rootHandler(Request req) {
 ''';
   return Response.ok(
     welcome,
-    headers: {HttpHeaders.contentTypeHeader: ContentType.html},
+    headers: {HttpHeaders.contentTypeHeader: ContentType.html.mimeType},
   );
 }

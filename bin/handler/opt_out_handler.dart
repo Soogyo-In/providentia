@@ -1,8 +1,10 @@
+import 'dart:io';
+
 import 'package:shelf/shelf.dart';
 
-Response optOutHandler(Request request) {
+Response optOutHandler(Request req) {
   // 옵트아웃 페이지
-  final String htmlContent = '''
+  final htmlContent = '''
       <!DOCTYPE html>
       <html>
       <head>
@@ -39,6 +41,6 @@ Response optOutHandler(Request request) {
     ''';
   return Response.ok(
     htmlContent,
-    headers: {'Content-Type': 'text/html; charset=utf-8'},
+    headers: {HttpHeaders.contentTypeHeader: ContentType.html.mimeType},
   );
 }
