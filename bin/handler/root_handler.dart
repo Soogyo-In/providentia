@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:shelf/shelf.dart';
 
-Future<Response> rootHandler(Request req) async {
+Response rootHandler(Request req) {
   final welcome = '''
 <!DOCTYPE html>
 <html lang="ko">
