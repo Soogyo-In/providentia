@@ -1,71 +1,45 @@
-import '../../spreadsheet_converter.dart';
-
 abstract interface class LedgerService {
-  Future<List<(String name, String id, String mimeType)>> getSpreadSheets();
-
   Future<List<OrganizeFilesByMonthResponse>> organizeFilesByMonth(
-    List<(String name, String id, String mimeType)> fileMetadata,
+    Iterable<CsvFile> csvFiles,
   );
 
-  Future<Csv> exportFileToCsv(String fileId, String mimeType);
+  Future<CsvFile> organizeLedger(CsvFile ledgerCsvFile);
+}
+
+class CsvFile {
+  CsvFile({required this.name, required this.csv});
+
+  final String name;
+  final String csv;
+
+  factory CsvFile.fromJson(Map<String, dynamic> json) {
+    return CsvFile(name: json['name'] as String, csv: json['csv'] as String);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'name': name, 'csv': csv};
+  }
 }
 
 class OrganizeFilesByMonthResponse {
-  final String month;
-  final List<FileMetadata> files;
+  OrganizeFilesByMonthResponse({required this.month, required this.fileNames});
 
-  OrganizeFilesByMonthResponse({required this.month, required this.files});
+  final String month;
+  final List<String> fileNames;
 
   factory OrganizeFilesByMonthResponse.fromJson(Map<String, dynamic> json) {
     return OrganizeFilesByMonthResponse(
       month: json['month'] as String,
-      files: (json['files'] as List)
-          .cast<Map<String, dynamic>>()
-          .map(FileMetadata.fromJson)
-          .toList(),
+      fileNames: (json['files'] as List).cast<String>(),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'month': month,
-      'files': files.map((item) => item.toJson()).toList(),
-    };
-  }
-}
-
-class FileMetadata {
-  final String id;
-  final String mimeType;
-
-  FileMetadata({required this.id, required this.mimeType});
-
-  factory FileMetadata.fromJson(Map<String, dynamic> json) {
-    return FileMetadata(
-      id: json['id'] as String,
-      mimeType: json['mimeType'] as String,
-    );
+    return {'month': month, 'files': fileNames};
   }
 
-  Map<String, dynamic> toJson() {
-    return {'id': id, 'mimeType': mimeType};
-  }
-}
-
-class SummerizeCsvByMonthResponse {
-  final String month;
-  final String csv;
-
-  SummerizeCsvByMonthResponse({required this.month, required this.csv});
-
-  factory SummerizeCsvByMonthResponse.fromJson(Map<String, dynamic> json) {
-    return SummerizeCsvByMonthResponse(
-      month: json['month'] as String,
-      csv: json['csv'] as String,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {'month': month, 'csv': csv};
+  @override
+  String toString() {
+    return 'OrganizeFilesByMonthResponse(month: $month, fileNames: $fileNames)';
   }
 }
